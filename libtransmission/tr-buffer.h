@@ -289,6 +289,15 @@ public:
 
     std::pair<value_type*, size_t> reserve_space(size_t n_bytes) override
     {
+        // The peer input buffer may use all memory already allocated by small::vector.
+        constexpr bool UseAllocatedCapacity = N == 16400U && GrowthFactor::num == 5 && GrowthFactor::den == 1;
+        if constexpr (UseAllocatedCapacity)
+        {
+            if (buf_.size() - end_pos_ < n_bytes && buf_.size() < buf_.capacity())
+            {
+                buf_.resize(buf_.capacity());
+            }
+        }
         if (auto const free_at_end = buf_.size() - end_pos_; free_at_end < n_bytes)
         {
             if (auto const total_free = begin_pos_ + free_at_end; total_free >= n_bytes)
@@ -302,6 +311,10 @@ public:
             else // even `total_free` is not enough, so resize
             {
                 buf_.resize(end_pos_ + n_bytes);
+                if constexpr (UseAllocatedCapacity)
+                {
+                    buf_.resize(buf_.capacity());
+                }
             }
         }
 

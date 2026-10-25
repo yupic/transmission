@@ -26,6 +26,7 @@
 #include "libtransmission/peer-mse.h"
 #include "libtransmission/peer-socket.h"
 #include "libtransmission/tr-buffer.h"
+#include "libtransmission/tr-outgoing-buffer.h"
 #include "libtransmission/tr-macros.h" // tr_sha1_digest_t, TR_CONSTEXPR20
 #include "libtransmission/utils-ev.h"
 
@@ -383,7 +384,7 @@ private:
     tr_sha1_digest_t info_hash_;
 
     PeerBuffer inbuf_;
-    PeerBuffer outbuf_;
+    libtransmission::ChunkedOutgoingBuffer outbuf_;
 
     tr_session* const session_;
 

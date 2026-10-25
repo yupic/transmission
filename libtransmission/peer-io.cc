@@ -59,9 +59,9 @@ namespace
 size_t get_desired_output_buffer_size(tr_peerIo const* io, uint64_t now)
 {
     // this is all kind of arbitrary, but what seems to work well is
-    // being large enough to hold the next 20 seconds' worth of input,
+    // being large enough to hold the next 5 seconds' worth of output,
     // or a few blocks, whichever is bigger. OK to tweak this as needed.
-    static auto constexpr PeriodSecs = uint64_t{ 15U };
+    static auto constexpr PeriodSecs = uint64_t{ 5U };
 
     // the 3 is an arbitrary number of blocks;
     // the .5 is to leave room for protocol messages
@@ -316,7 +316,23 @@ size_t tr_peerIo::try_write(size_t max)
     }
 
     auto error = tr_error{};
-    auto const n_written = socket_.try_write(buf, max, &error);
+    // Only the first readable span is contiguous. Queue accounting above
+    // still uses its total size. Existing TCP/uTP code receives a plain view.
+    struct Front final : libtransmission::BufferReader<std::byte>
+    {
+        libtransmission::ChunkedOutgoingBuffer& queue;
+        explicit Front(libtransmission::ChunkedOutgoingBuffer& q) : queue{q} {}
+        size_t size() const noexcept override { return queue.contiguous_size(); }
+        std::byte const* data() const noexcept override { return queue.data(); }
+        void drain(size_t n) override { queue.drain(n); }
+    } front{buf};
+    auto const first_size = front.size();
+    auto const n_written = socket_.try_write(front, max, &error);
+    if (n_written != 0U && n_written == first_size && !buf.empty())
+    {
+        // Another span may be ready even without a new socket-writable event.
+        flush_outbuf_soon();
+    }
     // enable further writes if there's more data to write
     set_enabled(Dir, !std::empty(buf) && (!error || can_retry_from_error(error.code())));
 
